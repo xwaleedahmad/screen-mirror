@@ -3,27 +3,36 @@ import { useEffect, useState } from "react";
 import {
   getDisplayOutputs,
   isWlMirrorInstalled,
+  isWlrRandrInstalled,
   startScreenMirror,
 } from "./utils";
-import WlMirrorNotFound from "./wl-mirror-not-found";
 import { Output } from "./types";
-import MonitorsNotFound from "./monitors-not-found";
+import HandleMissingRequirements from "./handle-missing-requirements";
 
 export default function ControlledList() {
+  const [isWlrRandrFound, setIsWlrRandrFound] = useState(true);
+  const [isWlMirrorFound, setIsWlMirrorFound] = useState(true);
+
   const [loading, setLoading] = useState(false);
   const [outputs, setOutputs] = useState<Output[]>();
   const [isScreenMirroring, setIsScreenMirroring] = useState(false);
-  const [isWlMirrorFound, setIsWlMirrorFound] = useState(true);
 
   const loadOutputs = async () => {
     setLoading(true);
 
+    const wlrRandrFound = await isWlrRandrInstalled();
+    if (!wlrRandrFound) {
+      setLoading(false);
+      setIsWlrRandrFound(false);
+      return;
+    }
     const wlMirrorFound = await isWlMirrorInstalled();
     if (!wlMirrorFound) {
       setLoading(false);
       setIsWlMirrorFound(false);
       return;
     }
+
     const data = await getDisplayOutputs();
     setOutputs(data);
     setLoading(false);
@@ -43,12 +52,29 @@ export default function ControlledList() {
     await startScreenMirror({ source, target, setIsScreenMirroring });
   };
 
-  if (!isWlMirrorFound) {
-    return <WlMirrorNotFound onRefresh={loadOutputs} />;
+  if (!isWlrRandrFound) {
+    return (
+      <HandleMissingRequirements
+        reason="wlr-randr-not-found"
+        onRefresh={loadOutputs}
+      />
+    );
   }
-
+  if (!isWlMirrorFound) {
+    return (
+      <HandleMissingRequirements
+        reason="wl-mirror-not-found"
+        onRefresh={loadOutputs}
+      />
+    );
+  }
   if (enabledDisplays && enabledDisplays?.length <= 1) {
-    return <MonitorsNotFound onRefresh={loadOutputs} />;
+    return (
+      <HandleMissingRequirements
+        reason="monitors-req-not-met"
+        onRefresh={loadOutputs}
+      />
+    );
   }
 
   return (
