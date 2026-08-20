@@ -1,9 +1,14 @@
 {
   "$schema": "https://raw.githubusercontent.com/vicinaehq/vicinae/refs/heads/main/extra/schemas/extension.json",
-  "name": "wayland-screen-mirror",
-  "title": "Wayland Screen Mirror",
-  "description": "Mirror Display Outputs on Wayland using wl-mirror",
-  "categories": [],
+  "name": "screen-mirror",
+  "title": "Screen Mirror",
+  "description": "Mirror display outputs on wlroots-compatible Wayland compositors using wl-mirror",
+  "categories": [
+    "System"
+  ],
+  "platforms": [
+    "Linux"
+  ],
   "license": "MIT",
   "author": "xwaleedahmad",
   "contributors": [],
@@ -13,7 +18,7 @@
     {
       "name": "mirror-screen",
       "title": "Mirror Screen",
-      "description": "Mirror Display Outputs",
+      "description": "Mirror display outputs on wlroots-compatible Wayland compositors",
       "mode": "view"
     }
   ],
