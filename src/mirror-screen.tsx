@@ -5,6 +5,7 @@ import {
 	cancelScreenMirror,
 	getActiveMirrorSession,
 	getDisplayOutputs,
+	handleError,
 	isWlMirrorInstalled,
 	isWlrRandrInstalled,
 	startScreenMirror,
@@ -26,51 +27,54 @@ export default function MirrorScreen() {
 	const loadOutputs = async () => {
 		setLoading(true);
 
-		const wlrRandrFound = await isWlrRandrInstalled();
-		if (!wlrRandrFound) {
-			setLoading(false);
-			setIsWlrRandrFound(false);
-			return;
-		}
-		const wlMirrorFound = await isWlMirrorInstalled();
-		if (!wlMirrorFound) {
-			setLoading(false);
-			setIsWlMirrorFound(false);
-			return;
-		}
-
-		const session = await getActiveMirrorSession();
-		setActiveMirror(session);
-
-		const data = await getDisplayOutputs();
-		setOutputs(data);
-
-		const enabled = (data as Output[])?.filter(
-			(output) => output.enabled !== false,
-		);
-		if (enabled && enabled.length >= 2) {
-			if (session?.source) {
-				setSelectedSource(session.source);
-			} else {
-				setSelectedSource((prev) =>
-					prev && enabled.some((d) => d.name === prev) ? prev : enabled[0].name,
-				);
+		try {
+			const wlrRandrFound = await isWlrRandrInstalled();
+			setIsWlrRandrFound(wlrRandrFound);
+			if (!wlrRandrFound) {
+				return;
 			}
 
-			if (session?.target) {
-				setSelectedTarget(session.target);
-			} else {
-				setSelectedTarget((prev) =>
-					prev &&
-					enabled.some((d) => d.name === prev) &&
-					prev !== enabled[0].name
-						? prev
-						: enabled[1].name,
-				);
+			const wlMirrorFound = await isWlMirrorInstalled();
+			setIsWlMirrorFound(wlMirrorFound);
+			if (!wlMirrorFound) {
+				return;
 			}
-		}
 
-		setLoading(false);
+			const session = await getActiveMirrorSession();
+			setActiveMirror(session);
+
+			const data = await getDisplayOutputs();
+			setOutputs(data);
+
+			const enabled = data.filter((output) => output.enabled !== false);
+			if (enabled && enabled.length >= 2) {
+				if (session?.source) {
+					setSelectedSource(session.source);
+				} else {
+					setSelectedSource((prev) =>
+						prev && enabled.some((d) => d.name === prev)
+							? prev
+							: enabled[0].name,
+					);
+				}
+
+				if (session?.target) {
+					setSelectedTarget(session.target);
+				} else {
+					setSelectedTarget((prev) =>
+						prev &&
+						enabled.some((d) => d.name === prev) &&
+						prev !== enabled[0].name
+							? prev
+							: enabled[1].name,
+					);
+				}
+			}
+		} catch (error) {
+			handleError("Failed to detect display outputs.", error);
+		} finally {
+			setLoading(false);
+		}
 	};
 
 	useEffect(() => {
@@ -81,7 +85,8 @@ export default function MirrorScreen() {
 			setActiveMirror((prev) => {
 				if (
 					prev?.source !== session?.source ||
-					prev?.target !== session?.target
+					prev?.target !== session?.target ||
+					prev?.pid !== session?.pid
 				) {
 					return session;
 				}
@@ -152,6 +157,18 @@ export default function MirrorScreen() {
 		await startScreenMirror({ source, target, setActiveMirror });
 	};
 
+	if (loading && !outputs) {
+		return (
+			<List isLoading={true}>
+				<List.EmptyView
+					icon={Icon.Monitor}
+					title="Detecting Monitors"
+					description="Loading active monitor outputs..."
+				/>
+			</List>
+		);
+	}
+
 	if (!isWlrRandrFound) {
 		return (
 			<HandleMissingRequirements
@@ -168,14 +185,6 @@ export default function MirrorScreen() {
 			/>
 		);
 	}
-	if (enabledDisplays && enabledDisplays?.length <= 1) {
-		return (
-			<HandleMissingRequirements
-				reason="monitors-req-not-met"
-				onRefresh={loadOutputs}
-			/>
-		);
-	}
 
 	if (activeMirror) {
 		return (
@@ -187,72 +196,71 @@ export default function MirrorScreen() {
 		);
 	}
 
+	if (!enabledDisplays || enabledDisplays.length <= 1) {
+		return (
+			<HandleMissingRequirements
+				reason="monitors-req-not-met"
+				onRefresh={loadOutputs}
+			/>
+		);
+	}
+
 	return (
-		<>
-			{loading ? (
-				<List.EmptyView
-					icon={Icon.Monitor}
-					title="No Monitors Found"
-					description="Could not detect active monitor outputs."
-				/>
-			) : (
-				<Form
-					isLoading={loading}
-					actions={
-						<ActionPanel>
-							<Action.SubmitForm
-								title="Start Screen Mirror"
-								style={Action.Style.Regular}
-								onSubmit={handleSubmit}
-							/>
-						</ActionPanel>
-					}
-				>
-					<Form.Description
-						title="Note"
-						text="Make sure to select different monitors for source and destination, otherwise the mirror will not work."
+		<Form
+			isLoading={loading}
+			actions={
+				<ActionPanel>
+					<Action.SubmitForm
+						title="Start Screen Mirror"
+						style={Action.Style.Regular}
+						onSubmit={handleSubmit}
 					/>
-					<Form.Separator />
+				</ActionPanel>
+			}
+		>
+			<Form.Description
+				title="Note"
+				text="Make sure to select different monitors for source and destination, otherwise the mirror will not work."
+			/>
+			<Form.Separator />
 
-					<Form.Dropdown
-						id="source"
-						title="Source Monitor"
-						value={selectedSource}
-						onChange={handleSourceChange}
-					>
-						{enabledDisplays?.map((output) => {
-							const current = output.modes.find((mode) => mode.current);
-							const res = `${current?.width}x${current?.height}@${current?.refresh}Hz`;
-							return (
-								<Form.Dropdown.Item
-									key={output.name}
-									title={`${output.name} ${output.make} - ${res}`}
-									value={output.name}
-								/>
-							);
-						})}
-					</Form.Dropdown>
+			<Form.Dropdown
+				id="source"
+				title="Source Monitor"
+				value={selectedSource}
+				onChange={handleSourceChange}
+			>
+				{enabledDisplays.map((output) => {
+					const current = output.modes.find((mode) => mode.current);
+					const res = `${current?.width}x${current?.height}@${current?.refresh}Hz`;
+					return (
+						<Form.Dropdown.Item
+							key={output.name}
+							title={`${output.name} ${output.make} - ${res}`}
+							value={output.name}
+						/>
+					);
+				})}
+			</Form.Dropdown>
 
-					<Form.Dropdown
-						id="target"
-						title="Target Monitor"
-						value={selectedTarget}
-						onChange={handleTargetChange}
-					>
-						{enabledDisplays?.map((output) => {
-							const current = output.modes.find((mode) => mode.current);
-							const res = `${current?.width}x${current?.height}@${current?.refresh}Hz`;
-							return (
-								<Form.Dropdown.Item
-									key={output.name}
-									title={`${output.name} ${output.make} - ${res}`}
-									value={output.name}
-								/>
-							);
-						})}
-					</Form.Dropdown>
-				</Form>
-			)}
-		</>
+			<Form.Dropdown
+				id="target"
+				title="Target Monitor"
+				value={selectedTarget}
+				onChange={handleTargetChange}
+			>
+				{enabledDisplays.map((output) => {
+					const current = output.modes.find((mode) => mode.current);
+					const res = `${current?.width}x${current?.height}@${current?.refresh}Hz`;
+					return (
+						<Form.Dropdown.Item
+							key={output.name}
+							title={`${output.name} ${output.make} - ${res}`}
+							value={output.name}
+						/>
+					);
+				})}
+			</Form.Dropdown>
+		</Form>
 	);
 }
