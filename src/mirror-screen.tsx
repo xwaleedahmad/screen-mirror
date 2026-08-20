@@ -14,10 +14,12 @@ import {
 export default function MirrorScreen() {
   const [isWlrRandrFound, setIsWlrRandrFound] = useState(true);
   const [isWlMirrorFound, setIsWlMirrorFound] = useState(true);
+  const [isScreenMirroring, setIsScreenMirroring] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [outputs, setOutputs] = useState<Output[]>();
-  const [isScreenMirroring, setIsScreenMirroring] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<string>("");
+  const [selectedTarget, setSelectedTarget] = useState<string>("");
 
   const loadOutputs = async () => {
     setLoading(true);
@@ -40,6 +42,21 @@ export default function MirrorScreen() {
 
     const data = await getDisplayOutputs();
     setOutputs(data);
+
+    const enabled = (data as Output[])?.filter(
+      (output) => output.enabled !== false,
+    );
+    if (enabled && enabled.length >= 2) {
+      setSelectedSource((prev) =>
+        prev && enabled.some((d) => d.name === prev) ? prev : enabled[0].name,
+      );
+      setSelectedTarget((prev) =>
+        prev && enabled.some((d) => d.name === prev) && prev !== enabled[0].name
+          ? prev
+          : enabled[1].name,
+      );
+    }
+
     setLoading(false);
   };
 
@@ -56,6 +73,46 @@ export default function MirrorScreen() {
 
   const enabledDisplays = outputs?.filter((output) => output.enabled !== false);
 
+  const handleSourceChange = (newSource: string) => {
+    setSelectedSource(newSource);
+
+    if (!enabledDisplays || enabledDisplays.length < 2) return;
+
+    if (enabledDisplays.length === 2) {
+      const other = enabledDisplays.find((d) => d.name !== newSource);
+      if (other) setSelectedTarget(other.name);
+    } else if (newSource === selectedTarget) {
+      const alternative =
+        selectedSource &&
+        selectedSource !== newSource &&
+        enabledDisplays.some((d) => d.name === selectedSource)
+          ? selectedSource
+          : enabledDisplays.find((d) => d.name !== newSource)?.name;
+
+      if (alternative) setSelectedTarget(alternative);
+    }
+  };
+
+  const handleTargetChange = (newTarget: string) => {
+    setSelectedTarget(newTarget);
+
+    if (!enabledDisplays || enabledDisplays.length < 2) return;
+
+    if (enabledDisplays.length === 2) {
+      const other = enabledDisplays.find((d) => d.name !== newTarget);
+      if (other) setSelectedSource(other.name);
+    } else if (newTarget === selectedSource) {
+      const alternative =
+        selectedTarget &&
+        selectedTarget !== newTarget &&
+        enabledDisplays.some((d) => d.name === selectedTarget)
+          ? selectedTarget
+          : enabledDisplays.find((d) => d.name !== newTarget)?.name;
+
+      if (alternative) setSelectedSource(alternative);
+    }
+  };
+
   const handleSubmit = async (values: Form.Values) => {
     if (isScreenMirroring) {
       await cancelScreenMirror(setIsScreenMirroring);
@@ -63,9 +120,13 @@ export default function MirrorScreen() {
     }
 
     const source =
-      (values.source as string) || (enabledDisplays?.[0]?.name as string);
+      selectedSource ||
+      (values.source as string) ||
+      (enabledDisplays?.[0]?.name as string);
     const target =
-      (values.target as string) || (enabledDisplays?.[1]?.name as string);
+      selectedTarget ||
+      (values.target as string) ||
+      (enabledDisplays?.[1]?.name as string);
 
     await startScreenMirror({ source, target, setIsScreenMirroring });
   };
@@ -140,7 +201,8 @@ export default function MirrorScreen() {
               <Form.Dropdown
                 id="source"
                 title="Source Monitor"
-                defaultValue={enabledDisplays?.[0]?.name}
+                value={selectedSource}
+                onChange={handleSourceChange}
               >
                 {enabledDisplays?.map((output) => {
                   const current = output.modes.find((mode) => mode.current);
@@ -158,7 +220,8 @@ export default function MirrorScreen() {
               <Form.Dropdown
                 id="target"
                 title="Target Monitor"
-                defaultValue={enabledDisplays?.[1]?.name}
+                value={selectedTarget}
+                onChange={handleTargetChange}
               >
                 {enabledDisplays?.map((output) => {
                   const current = output.modes.find((mode) => mode.current);

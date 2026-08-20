@@ -27,6 +27,15 @@ export async function isWlMirrorInstalled(): Promise<boolean> {
 	}
 }
 
+export async function getDisplayOutputs() {
+	try {
+		const { stdout } = await execAsync("wlr-randr --json");
+		return JSON.parse(stdout);
+	} catch (error) {
+		return {};
+	}
+}
+
 export async function isScreenMirrorRunning(): Promise<boolean> {
 	try {
 		const { stdout } = await execAsync("ps -C wl-mirror -o state=");
@@ -36,38 +45,6 @@ export async function isScreenMirrorRunning(): Promise<boolean> {
 			.some((state) => state.length > 0 && state !== "Z");
 	} catch {
 		return false;
-	}
-}
-
-export async function cancelScreenMirror(
-	setIsScreenMirroring?: React.Dispatch<React.SetStateAction<boolean>>,
-) {
-	try {
-		const isRunning = await isScreenMirrorRunning();
-		if (!isRunning) {
-			setIsScreenMirroring?.(false);
-			return true;
-		}
-
-		await execAsync("pkill -x wl-mirror");
-		showSuccess("Screen mirroring stopped successfully.");
-		setIsScreenMirroring?.(false);
-		return true;
-	} catch (error) {
-		handleError("Failed to stop screen mirroring.", error);
-		console.log(error);
-		return false;
-	}
-}
-
-export const stopScreenMirror = cancelScreenMirror;
-
-export async function getDisplayOutputs() {
-	try {
-		const { stdout } = await execAsync("wlr-randr --json");
-		return JSON.parse(stdout);
-	} catch (error) {
-		return {};
 	}
 }
 
@@ -115,6 +92,27 @@ export async function startScreenMirror({
 	}
 }
 
+export async function cancelScreenMirror(
+	setIsScreenMirroring?: React.Dispatch<React.SetStateAction<boolean>>,
+) {
+	try {
+		const isRunning = await isScreenMirrorRunning();
+		if (!isRunning) {
+			setIsScreenMirroring?.(false);
+			return true;
+		}
+
+		await execAsync("pkill -x wl-mirror");
+		showSuccess("Screen mirroring stopped successfully.");
+		setIsScreenMirroring?.(false);
+		return true;
+	} catch (error) {
+		handleError("Failed to stop screen mirroring.", error);
+		console.log(error);
+		return false;
+	}
+}
+
 export function showSuccess(title: string, message?: string) {
 	showToast({
 		style: Toast.Style.Success,
@@ -122,6 +120,7 @@ export function showSuccess(title: string, message?: string) {
 		...(message && { message }),
 	});
 }
+
 export function handleError(title: string, error: unknown) {
 	showToast({
 		style: Toast.Style.Failure,
