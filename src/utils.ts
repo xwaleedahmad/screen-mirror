@@ -1,13 +1,8 @@
 import { showToast, Toast } from "@vicinae/api";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { ActiveMirrorSession, ScreenMirrorProps } from "./types";
 export const execAsync = promisify(exec);
-
-type ScreenMirrorProps = {
-	source: string;
-	target: string;
-	setIsScreenMirroring: React.Dispatch<React.SetStateAction<boolean>>;
-};
 
 export async function isWlrRandrInstalled(): Promise<boolean> {
 	try {
@@ -36,26 +31,36 @@ export async function getDisplayOutputs() {
 	}
 }
 
-export async function isScreenMirrorRunning(): Promise<boolean> {
+export async function getActiveMirrorSession(): Promise<ActiveMirrorSession | null> {
 	try {
-		const { stdout } = await execAsync("ps -C wl-mirror -o state=");
-		return stdout
-			.split("\n")
-			.map((s) => s.trim())
-			.some((state) => state.length > 0 && state !== "Z");
+		const { stdout } = await execAsync("ps -C wl-mirror -o args=");
+		const lines = stdout.trim().split("\n").filter(Boolean);
+		for (const line of lines) {
+			if (line.includes("<defunct>")) continue;
+			const targetMatch = line.match(/--fullscreen-output\s+([^\s]+)/);
+			const target = targetMatch ? targetMatch[1] : undefined;
+			const args = line.split(/\s+/);
+			const lastArg = args[args.length - 1];
+			const source = lastArg && !lastArg.startsWith("-") ? lastArg : undefined;
+
+			if (source && target) {
+				return { source, target };
+			}
+		}
 	} catch {
-		return false;
+		return null;
 	}
+	return null;
 }
 
 export async function startScreenMirror({
 	source,
 	target,
-	setIsScreenMirroring,
+	setActiveMirror,
 }: ScreenMirrorProps) {
 	try {
-		if (await isScreenMirrorRunning()) {
-			return await cancelScreenMirror(setIsScreenMirroring);
+		if (await getActiveMirrorSession()) {
+			return await cancelScreenMirror(setActiveMirror);
 		}
 
 		if (!source || !target) {
@@ -63,7 +68,6 @@ export async function startScreenMirror({
 				style: Toast.Style.Failure,
 				title: "Source and target monitors are required.",
 			});
-			setIsScreenMirroring(false);
 			return false;
 		}
 
@@ -72,39 +76,37 @@ export async function startScreenMirror({
 				style: Toast.Style.Failure,
 				title: "Source and destination cannot be the same.",
 			});
-			setIsScreenMirroring(false);
 			return false;
 		}
 
-		setIsScreenMirroring(true);
+		setActiveMirror?.({ source, target });
 
 		await execAsync(
 			`setsid -f wl-mirror --fullscreen-output ${target} --fullscreen ${source}`,
 		);
 
-		showSuccess("Screen mirroring started successfully.");
 		return true;
 	} catch (error) {
 		handleError("Failed to start screen mirroring.", error);
 		console.log(error);
-		setIsScreenMirroring(false);
+		setActiveMirror?.(null);
 		return false;
 	}
 }
 
 export async function cancelScreenMirror(
-	setIsScreenMirroring?: React.Dispatch<React.SetStateAction<boolean>>,
+	setActiveMirror?: (session: ActiveMirrorSession | null) => void,
 ) {
 	try {
-		const isRunning = await isScreenMirrorRunning();
-		if (!isRunning) {
-			setIsScreenMirroring?.(false);
+		const activeSession = await getActiveMirrorSession();
+		if (!activeSession) {
+			setActiveMirror?.(null);
 			return true;
 		}
 
 		await execAsync("pkill -x wl-mirror");
 		showSuccess("Screen mirroring stopped successfully.");
-		setIsScreenMirroring?.(false);
+		setActiveMirror?.(null);
 		return true;
 	} catch (error) {
 		handleError("Failed to stop screen mirroring.", error);

@@ -26,3 +26,14 @@ export type Output = {
 	scale: number;
 	adaptive_sync: boolean;
 };
+
+export type ActiveMirrorSession = {
+	source: string;
+	target: string;
+};
+
+export type ScreenMirrorProps = {
+	source: string;
+	target: string;
+	setActiveMirror?: (session: ActiveMirrorSession | null) => void;
+};
