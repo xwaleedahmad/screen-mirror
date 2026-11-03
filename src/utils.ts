@@ -16,7 +16,7 @@ import type {
 export const execAsync = promisify(exec);
 
 const ACTIVE_MIRROR_STORAGE_KEY = "screen_mirror_active_session";
-const MIRROR_OPTIONS_STORAGE_KEY = "screen_mirror_last_options_v2";
+const MIRROR_OPTIONS_STORAGE_KEY = "screen_mirror_last_options";
 const MIRROR_FORM_STATE_KEY = "screen_mirror_picker_state";
 
 const REGION_PATTERN = /^(-?\d+),(-?\d+)\s+(\d+)x(\d+)(\s+\S+)?$/;
